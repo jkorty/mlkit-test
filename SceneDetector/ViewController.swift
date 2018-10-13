@@ -29,6 +29,8 @@
  */
 
 import UIKit
+import CoreML
+import Vision
 
 class ViewController: UIViewController {
 
@@ -48,6 +50,12 @@ class ViewController: UIViewController {
     }
 
     scene.image = image
+    
+    guard let ciImage = CIImage(image: image) else {
+      fatalError("couldn't conver UIImage to CIImage")
+    }
+    
+    detectScene(image: ciImage)
   }
 }
 
@@ -59,6 +67,39 @@ extension ViewController {
     pickerController.delegate = self
     pickerController.sourceType = .savedPhotosAlbum
     present(pickerController, animated: true)
+  }
+
+  func detectScene(image: CIImage) {
+    answerLabel.text = "detecting scene..."
+    
+    // Load the ML model through its generated class
+    guard let model = try? VNCoreMLModel(for: GoogLeNetPlaces().model) else {
+      fatalError("can't load Places ML model")
+    }
+    
+    // Create a Vision request with completion handler
+    let request = VNCoreMLRequest(model: model) { [weak self] request, error in
+      guard let results = request.results as? [VNClassificationObservation],
+        let topResult = results.first else {
+          fatalError("unexpected result type from VNCoreMLRequest")
+      }
+      
+      // Update UI on main queue
+      let article = (self?.vowels.contains(topResult.identifier.first!))! ? "an" : "a"
+      DispatchQueue.main.async { [weak self] in
+        self?.answerLabel.text = "\(Int(topResult.confidence * 100))% it's \(article) \(topResult.identifier)"
+      }
+    }
+    
+    // Run the Core ML GoogLeNetPlaces classifier on global dispatch queue
+    let handler = VNImageRequestHandler(ciImage: image)
+    DispatchQueue.global(qos: .userInteractive).async {
+      do {
+        try handler.perform([request])
+      } catch {
+        print(error)
+      }
+    }
   }
 }
 
@@ -73,6 +114,12 @@ extension ViewController: UIImagePickerControllerDelegate {
     }
 
     scene.image = image
+    
+    guard let ciImage = CIImage(image: image) else {
+      fatalError("couldn't conver UIImage to CIImage")
+    }
+    
+    detectScene(image: ciImage)
   }
 }
 
